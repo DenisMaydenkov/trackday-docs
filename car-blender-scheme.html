@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Иерархия машины в Blender</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: одна колонка-справочник; два дерева рядом на широком экране, правила — плашками ниже. Тёмная тема Trackday (одна, намеренно). */
+:root {
+  color-scheme: dark;
+  --bg-top: #292929; --bg-bottom: #090909;
+  --plate-top: #2e2e2e; --plate-bottom: #090909;
+  --edge: #333333; --edge-hi: #666666;
+  --ink: #e4e4e4; --muted: #9a9a9a; --silver: #6e6e6e;
+  --green: #4eff55; --yellow: #ffea4e; --link: #7ddaff; --red: #fa4444;
+  --toner: #121212d9;
+  --font-ui: "Google Sans", "Product Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 16px; --r-chip: 8px;
+}
+* { box-sizing: border-box; }
+body {
+  background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom) 640px) var(--bg-bottom);
+  color: var(--ink); font: 15px/1.55 var(--font-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 40px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 700; }
+h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.1; }
+h2 { font-size: 22px; }
+h3 { font-size: 16px; }
+p { margin: 0; max-width: 68ch; }
+.lead { color: var(--muted); font-size: 16px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+code, .mono { font-family: var(--font-code); font-size: 13px; }
+code { background: #ffffff0d; border: 1px solid var(--edge); border-radius: 6px; padding: 1px 6px; }
+
+header { display: grid; gap: 14px; }
+.flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 6px; }
+.flow .step { font-family: var(--font-code); font-size: 13px; padding: 8px 12px; border-radius: var(--r-chip);
+  background: linear-gradient(var(--plate-top), var(--plate-bottom)); border: 1px solid var(--edge); box-shadow: inset 0 1px 0 var(--edge-hi); }
+.flow .arrow { color: var(--silver); }
+.flow .step.hl { border-color: var(--green); box-shadow: inset 0 0 0 2px var(--green); }
+
+.plate { background: linear-gradient(var(--plate-top), var(--plate-bottom)); border: 1px solid var(--edge);
+  box-shadow: inset 0 1px 0 var(--edge-hi); border-radius: var(--r); padding: 22px; min-width: 0; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 13px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.trees { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; align-items: start; }
+@media (max-width: 900px) { .trees { grid-template-columns: 1fr; } }
+.tree-head { display: grid; gap: 6px; margin-bottom: 14px; }
+.file { font-family: var(--font-code); font-size: 13px; color: var(--link); }
+.scroll { overflow-x: auto; }
+
+ul.tree { list-style: none; margin: 0; padding: 0; min-width: 440px; }
+ul.tree ul { list-style: none; margin: 0; padding-left: 22px; border-left: 1px dashed var(--edge); margin-left: 9px; }
+ul.tree li { padding: 3px 0; }
+.node { display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.name { font-family: var(--font-code); font-size: 13.5px; }
+.ico { display: inline-block; width: 18px; text-align: center; font-family: var(--font-code); font-size: 12px; }
+.empty .ico { color: var(--yellow); }
+.mesh .ico { color: var(--link); }
+.col .ico { color: var(--red); }
+.empty > .node .name { font-weight: 600; }
+.note { color: var(--muted); font-size: 12.5px; }
+.tag { font-size: 11px; letter-spacing: .04em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--edge); color: var(--muted); white-space: nowrap; }
+.tag.slot { border-color: var(--green); color: var(--green); }
+.tag.unity { border-color: #7ddaff55; color: var(--link); }
+
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.rules .plate { display: grid; gap: 10px; align-content: start; }
+.rules ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.rules li::marker { color: var(--silver); }
+.ok { color: var(--green); }
+.warn { color: var(--yellow); }
+
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--edge); vertical-align: top; }
+th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+td:first-child { font-family: var(--font-code); font-size: 13px; white-space: nowrap; }
+
+.checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.checklist li { display: flex; gap: 10px; align-items: baseline; }
+.checklist li::before { content: ""; flex: 0 0 14px; height: 14px; border-radius: 4px; border: 2px solid var(--green); transform: translateY(2px); }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Trackday · пайплайн моделей машины</div>
+    <h1>Иерархия машины в Blender</h1>
+    <p class="lead">Один рабочий <code>.blend</code> на машину. Из него экспортируются два FBX: базовая машина и весь её тюнинг. Unity по именам объектов сама раскладывает детали по слотам.</p>
+    <div class="flow" aria-label="Путь модели">
+      <span class="step">E36.blend</span><span class="arrow">→</span>
+      <span class="step hl">E36_Base.fbx</span><span class="arrow">+</span>
+      <span class="step hl">E36_Tuning.fbx</span><span class="arrow">→</span>
+      <span class="step">Unity: префаб машины + детали по слотам</span>
+    </div>
+  </header>
+
+  <section class="plate" style="display:grid; gap:12px">
+    <h2>Как устроен .blend</h2>
+    <p>Коллекции Blender нужны только для порядка и выбора, что экспортировать: в FBX они не попадают. Иерархию задают <b>родители</b> — пустышки (Empty) и меши внутри них.</p>
+    <div class="scroll">
+      <ul class="tree" style="min-width:420px">
+        <li class="empty"><span class="node"><span class="ico">▣</span><span class="name">EXPORT_Base</span><span class="note">коллекция → экспорт в E36_Base.fbx</span></span></li>
+        <li class="empty"><span class="node"><span class="ico">▣</span><span class="name">EXPORT_Tuning</span><span class="note">коллекция → экспорт в E36_Tuning.fbx</span></span></li>
+        <li class="empty"><span class="node"><span class="ico">▣</span><span class="name">WIP</span><span class="note">черновики, хайполи, старые версии — не экспортируется</span></span></li>
+        <li class="empty"><span class="node"><span class="ico">▣</span><span class="name">REF</span><span class="note">чертежи, фото, референсы — не экспортируется</span></span></li>
+      </ul>
+    </div>
+    <div class="legend">
+      <span><span class="ico" style="color:var(--yellow)">✛</span> Empty — пустышка-группа или слот</span>
+      <span><span class="ico" style="color:var(--link)">△</span> Mesh — модель</span>
+      <span><span class="ico" style="color:var(--red)">◇</span> коллайдер</span>
+      <span><span class="tag slot">слот</span> сюда Unity ставит выбранную деталь</span>
+    </div>
+  </section>
+
+  <section class="trees">
+    <div class="plate">
+      <div class="tree-head">
+        <h2>Базовая машина</h2>
+        <span class="file">EXPORT_Base → E36_Base.fbx</span>
+        <p class="note">Кузов, салон, колёса и стоковые детали. Каждая заменяемая деталь лежит в своей пустышке-слоте.</p>
+      </div>
+      <div class="scroll">
+      <ul class="tree">
+        <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">E36</span><span class="note">корень, origin на земле под центром машины</span></span>
+          <ul>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Body</span></span>
+              <ul>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Shell</span><span class="note">кузов, который не меняется: крыша, стойки, пол, рама</span></span></li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Slots</span><span class="tag unity">Unity: слоты тюнинга</span></span>
+                  <ul>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Bumper_F</span><span class="tag slot">слот</span></span>
+                      <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Bumper_F__Stock</span></span></li></ul></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Bumper_R</span><span class="tag slot">слот</span></span>
+                      <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Bumper_R__Stock</span></span></li></ul></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Face</span><span class="tag slot">слот</span><span class="note">решётка</span></span>
+                      <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Face__Stock</span></span></li></ul></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Hood</span><span class="tag slot">слот</span><span class="note">origin на петлях</span></span>
+                      <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Hood__Stock</span></span></li></ul></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Trunk</span><span class="tag slot">слот</span><span class="note">origin на петлях</span></span>
+                      <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Trunk__Stock</span></span></li></ul></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Fender_FL · Fender_FR</span><span class="tag slot">слот</span></span></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Fender_RL · Fender_RR</span><span class="tag slot">слот</span><span class="note">задние арки, если они отдельные</span></span></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Door_L · Door_R</span><span class="tag slot">слот</span><span class="note">origin на петлях</span></span></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Mirror_L · Mirror_R</span><span class="tag slot">слот</span></span></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Skirt_L · Skirt_R</span><span class="tag slot">слот</span><span class="note">пороги</span></span></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Spoiler · SpoilerRoof</span><span class="tag slot">слот</span><span class="note">пустые, если в стоке спойлера нет</span></span></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Exhaust</span><span class="tag slot">слот</span></span>
+                      <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Exhaust__Stock</span></span></li></ul></li>
+                  </ul>
+                </li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Lights</span><span class="tag slot">слоты</span></span>
+                  <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Light_FL__Stock · Light_FR__Stock · Light_RL__Stock · Light_RR__Stock</span></span></li></ul></li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Glass</span></span>
+                  <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Windshield_F · Windshield_R · Window_L · Window_R</span></span></li></ul></li>
+              </ul>
+            </li>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Interior</span></span>
+              <ul>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Dashboard · Torpedo · RoofLining · Pedals</span></span></li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">SteeringWheel</span><span class="tag slot">слот</span><span class="note">origin в центре ступицы, ось — вдоль колонки</span></span></li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Seat_L · Seat_R</span><span class="tag slot">слот</span><span class="note">origin на креплении к полу</span></span></li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Shifter · Mats</span><span class="tag slot">слот</span></span></li>
+              </ul>
+            </li>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Wheels</span></span>
+              <ul>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Wheel_FL</span><span class="note">origin в центре ступицы</span></span>
+                  <ul>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Rim</span><span class="tag slot">слот</span></span></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Tire</span><span class="tag slot">слот</span></span></li>
+                    <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Brake</span><span class="tag slot">слот</span><span class="note">диск + суппорт</span></span></li>
+                  </ul></li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Wheel_FR · Wheel_RL · Wheel_RR</span><span class="note">так же</span></span></li>
+              </ul>
+            </li>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Mounts</span><span class="note">пустышки-метки для Unity</span></span>
+              <ul>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Plate_F · Plate_R</span><span class="note">где стоят номера</span></span></li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Lamp_FL · Lamp_FR · Lamp_RL · Lamp_RR</span><span class="note">откуда светят фары</span></span></li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">ExhaustTip</span><span class="note">откуда идут дым и пламя</span></span></li>
+                <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Driver</span><span class="note">камера от первого лица</span></span></li>
+              </ul>
+            </li>
+            <li class="col"><span class="node"><span class="ico">◇</span><span class="name">COL_Body</span><span class="note">упрощённый выпуклый коллайдер, без материала</span></span></li>
+            <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">ShadowCaster</span><span class="note">лоуполи для теней</span></span></li>
+          </ul>
+        </li>
+      </ul>
+      </div>
+    </div>
+
+    <div class="plate">
+      <div class="tree-head">
+        <h2>Тюнинг этой машины</h2>
+        <span class="file">EXPORT_Tuning → E36_Tuning.fbx</span>
+        <p class="note">Все варианты деталей, которые подходят только к E36. Группы — для порядка; Unity читает имя меша <code>Слот__Вариант</code> и делает из каждого отдельную деталь.</p>
+      </div>
+      <div class="scroll">
+      <ul class="tree">
+        <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">E36_Tuning</span><span class="note">тот же origin, что у корня E36</span></span>
+          <ul>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Bumper_F</span></span>
+              <ul>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Bumper_F__Sport</span><span class="tag unity">→ деталь</span></span></li>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Bumper_F__M3</span><span class="tag unity">→ деталь</span></span></li>
+              </ul></li>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Hood</span></span>
+              <ul>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Hood__Carbon</span></span></li>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Hood__Vented</span></span></li>
+              </ul></li>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Fender_FL</span></span>
+              <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Fender_FL__Wide</span></span></li></ul></li>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Fender_FR</span></span>
+              <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Fender_FR__Wide</span><span class="note">пара к левому — то же имя варианта</span></span></li></ul></li>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Light_FL · Light_FR</span></span>
+              <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Light_FL__Angel · Light_FR__Angel</span></span></li></ul></li>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Spoiler</span></span>
+              <ul><li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Spoiler__Ducktail</span></span></li></ul></li>
+            <li class="empty"><span class="node"><span class="ico">✛</span><span class="name">Kit_Rocket</span><span class="note">комплект: ставится и продаётся целиком</span></span>
+              <ul>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Bumper_F__Rocket</span></span></li>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Bumper_R__Rocket</span></span></li>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Fender_FL__Rocket · Fender_FR__Rocket</span></span></li>
+                <li class="mesh"><span class="node"><span class="ico">△</span><span class="name">Skirt_L__Rocket · Skirt_R__Rocket</span></span></li>
+              </ul></li>
+          </ul>
+        </li>
+      </ul>
+      </div>
+      <div style="display:grid; gap:8px; margin-top:18px">
+        <h3>Универсальный тюнинг — отдельно</h3>
+        <p class="note">Рули, сиденья, коврики, диски подходят ко всем машинам и живут в своих файлах (например <code>Universal_SteeringWheels.blend</code>). У них origin — в точке крепления, а не в центре машины: положение задаёт слот конкретной машины.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="rules">
+    <div class="plate">
+      <h3>Имена</h3>
+      <ul>
+        <li><code>Слот__Вариант</code> — два подчёркивания. Сток базы — <code>__Stock</code>.</li>
+        <li>Стороны — <b>от водителя</b>: <code>_L</code> левая, <code>_R</code> правая.</li>
+        <li>Колёса и углы: <code>FL FR RL RR</code> — перед/зад, лево/право.</li>
+        <li>Имена слотов одинаковые у всех машин: код тюнинга общий.</li>
+        <li>Коллайдеры — с префиксом <code>COL_</code>.</li>
+        <li class="warn">Без <code>.001</code>, <code>Cube.003</code>, кириллицы и пробелов.</li>
+      </ul>
+    </div>
+    <div class="plate">
+      <h3>Origin (точка опоры)</h3>
+      <ul>
+        <li>Корень машины — на земле под центром кузова.</li>
+        <li>Двери, капот, багажник — на петлях: так они смогут открываться и отрываться.</li>
+        <li>Колёса — в центре ступицы.</li>
+        <li class="ok">У всех вариантов одного слота <b>тот же origin</b>, что у стока — тогда деталь встаёт ровно.</li>
+        <li>Остальные детали — origin в центре машины.</li>
+      </ul>
+    </div>
+    <div class="plate">
+      <h3>Левое и правое — раздельно</h3>
+      <ul>
+        <li>Крылья, двери, зеркала, пороги, фары — отдельные меши на каждую сторону.</li>
+        <li>Иначе нельзя повредить или заменить одну сторону.</li>
+        <li>Удобно моделить одну сторону с Mirror и разрезать перед экспортом.</li>
+      </ul>
+    </div>
+    <div class="plate">
+      <h3>Материалы</h3>
+      <ul>
+        <li>Имена совпадают с общими материалами Unity: <code>CarPaint</code>, <code>Chrome</code>, <code>Glass</code>, <code>Rubber</code>, <code>Plastic</code>, <code>Lights</code>.</li>
+        <li>Unity подставит их по имени — текстуры в FBX не встраивать.</li>
+        <li>Краска кузова — только на <code>CarPaint</code>: так работает покраска.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="plate" style="display:grid; gap:14px">
+    <h2>Что получится в Unity</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>В Blender</th><th>В Unity</th></tr></thead>
+        <tbody>
+          <tr><td>E36 (корень)</td><td>Корень префаба машины: на нём RCC, Rigidbody, звук, свет.</td></tr>
+          <tr><td>Slots/Bumper_F</td><td>Слот тюнинга. При покупке бампера Unity убирает текущий меш и кладёт выбранную деталь.</td></tr>
+          <tr><td>Bumper_F__Sport</td><td>Отдельная деталь: свой меш и префаб в <code>Generated/Bumper_F/</code>. Грузится только когда установлена.</td></tr>
+          <tr><td>Kit_Rocket</td><td>Комплект: одна покупка ставит все его детали в их слоты.</td></tr>
+          <tr><td>Wheels/Wheel_FL</td><td>Модель колеса для RCC; внутри слоты дисков, шин и тормозов.</td></tr>
+          <tr><td>Mounts/…</td><td>Точки для номеров, фар, выхлопа и камеры. Сюда же можно вешать точки меню стайлинга.</td></tr>
+          <tr><td>COL_Body</td><td>MeshCollider машины (convex), невидимый.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="plate" style="display:grid; gap:14px">
+    <h2>Перед экспортом</h2>
+    <ul class="checklist">
+      <li>Масштаб 1 = 1 метр; применены Rotation и Scale (Ctrl+A).</li>
+      <li>Машина смотрит вперёд по −Y (в виде спереди, Numpad 1, видно морду).</li>
+      <li>Экспортируется только коллекция EXPORT_…: «Limit to → Active Collection».</li>
+      <li>FBX: Forward −Z, Up Y, Apply Scalings: FBX All, Apply Modifiers включено.</li>
+      <li>Нет камер, света, анимаций и скрытых объектов.</li>
+      <li>Имена материалов — из общего списка; текстуры не встроены.</li>
+      <li>Варианты тюнинга лежат в тех же координатах, что и база (не сдвинуты).</li>
+    </ul>
+    <p class="note">Оси Blender и Unity легко перепутать. На первом экспорте проверим в Unity, что передний бампер стоит по +Z, и при необходимости поправим настройки один раз.</p>
+  </section>
+</div>
+</body>
+</html>
